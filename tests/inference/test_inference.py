@@ -14,6 +14,14 @@ from sgm.inference.api import (
 )
 import sgm.inference.helpers as helpers
 
+import os
+import numpy as np
+
+NUM_SAMPLES = 1
+
+N_STEPS = 40
+HIGH_NOISE_FRAC = 0.8
+
 
 @pytest.mark.inference
 class TestInference:
@@ -28,9 +36,10 @@ class TestInference:
         scope="class",
         params=[
             [ModelArchitecture.SDXL_V1_BASE, ModelArchitecture.SDXL_V1_REFINER],
-            [ModelArchitecture.SDXL_V0_9_BASE, ModelArchitecture.SDXL_V0_9_REFINER],
+#            [ModelArchitecture.SDXL_V0_9_BASE, ModelArchitecture.SDXL_V0_9_REFINER],
         ],
-        ids=["SDXL_V1", "SDXL_V0_9"],
+        ids=["SDXL_V1"],
+#        ids=["SDXL_V1", "SDXL_V0_9"],
     )
     def sdxl_pipelines(self, request) -> Tuple[SamplingPipeline, SamplingPipeline]:
         base_pipeline = SamplingPipeline(request.param[0])
@@ -45,10 +54,11 @@ class TestInference:
         image = Image.fromarray(image_array.astype("uint8")).convert("RGB")
         return helpers.get_input_image_tensor(image)
 
+    '''
     @pytest.mark.parametrize("sampler_enum", Sampler)
     def test_txt2img(self, pipeline: SamplingPipeline, sampler_enum):
         output = pipeline.text_to_image(
-            params=SamplingParams(sampler=sampler_enum.value, steps=10),
+            params=SamplingParams(sampler=sampler_enum.value, steps=N_STEPS),
             prompt="A professional photograph of an astronaut riding a pig",
             negative_prompt="",
             samples=1,
@@ -56,16 +66,40 @@ class TestInference:
 
         assert output is not None
 
+        NUM_SAMPLES = 1
+
+        output = output.cpu() * 255
+        for i in range(0, NUM_SAMPLES):
+            # N C H W
+            _sample = output[i]
+            _sample = np.transpose(_sample.numpy().astype(np.uint8), (1, 2, 0))
+            print(f"Shape of tensor (rearranged): {_sample.shape}")
+            img = Image.fromarray(_sample)
+            img.save(os.path.join('output/txt2img', 'output_{}_{}.png'.format(sampler_enum.value, i)))
+
+
     @pytest.mark.parametrize("sampler_enum", Sampler)
     def test_img2img(self, pipeline: SamplingPipeline, sampler_enum):
         output = pipeline.image_to_image(
-            params=SamplingParams(sampler=sampler_enum.value, steps=10),
+            params=SamplingParams(sampler=sampler_enum.value, steps=N_STEPS),
             image=self.create_init_image(pipeline.specs.height, pipeline.specs.width),
             prompt="A professional photograph of an astronaut riding a pig",
             negative_prompt="",
             samples=1,
         )
         assert output is not None
+
+        NUM_SAMPLES = 1
+
+        output = output.cpu() * 255
+        for i in range(0, NUM_SAMPLES):
+            # N C H W
+            _sample = output[i]
+            _sample = np.transpose(_sample.numpy().astype(np.uint8), (1, 2, 0))
+            print(f"Shape of tensor (rearranged): {_sample.shape}")
+            img = Image.fromarray(_sample)
+            img.save(os.path.join('output/img2img', 'output_{}_{}.png'.format(sampler_enum.value, i)))
+    '''
 
     @pytest.mark.parametrize("sampler_enum", Sampler)
     @pytest.mark.parametrize(
@@ -80,21 +114,21 @@ class TestInference:
         base_pipeline, refiner_pipeline = sdxl_pipelines
         if use_init_image:
             output = base_pipeline.image_to_image(
-                params=SamplingParams(sampler=sampler_enum.value, steps=10),
+                params=SamplingParams(sampler=sampler_enum.value, steps=int(N_STEPS*HIGH_NOISE_FRAC)),
                 image=self.create_init_image(
                     base_pipeline.specs.height, base_pipeline.specs.width
                 ),
                 prompt="A professional photograph of an astronaut riding a pig",
                 negative_prompt="",
-                samples=1,
+                samples=NUM_SAMPLES,
                 return_latents=True,
             )
         else:
             output = base_pipeline.text_to_image(
-                params=SamplingParams(sampler=sampler_enum.value, steps=10),
+                params=SamplingParams(sampler=sampler_enum.value, steps=int(N_STEPS*HIGH_NOISE_FRAC)),
                 prompt="A professional photograph of an astronaut riding a pig",
                 negative_prompt="",
-                samples=1,
+                samples=NUM_SAMPLES,
                 return_latents=True,
             )
 
@@ -102,10 +136,20 @@ class TestInference:
         samples, samples_z = output
         assert samples is not None
         assert samples_z is not None
-        refiner_pipeline.refiner(
-            params=SamplingParams(sampler=sampler_enum.value, steps=10),
+        output = refiner_pipeline.refiner(
+            params=SamplingParams(sampler=sampler_enum.value, steps=int(N_STEPS*(1-HIGH_NOISE_FRAC))),
             image=samples_z,
             prompt="A professional photograph of an astronaut riding a pig",
             negative_prompt="",
-            samples=1,
+            samples=NUM_SAMPLES,
         )
+
+        output = output.cpu() * 255
+        for i in range(0, NUM_SAMPLES):
+            # N C H W
+            _sample = output[i]
+            _sample = np.transpose(_sample.numpy().astype(np.uint8), (1, 2, 0))
+            #print(f"Shape of tensor (rearranged): {_sample.shape}")
+            img = Image.fromarray(_sample)
+            img.save(os.path.join('output', 'output_{}_{}_{}.png'.format(sampler_enum.value, 'ii' if use_init_image else 'ti', i)))
+

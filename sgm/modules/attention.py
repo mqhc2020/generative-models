@@ -45,6 +45,7 @@ try:
     import xformers
     import xformers.ops
 
+    #XFORMERS_IS_AVAILABLE = False
     XFORMERS_IS_AVAILABLE = True
 except:
     XFORMERS_IS_AVAILABLE = False
@@ -282,6 +283,7 @@ class CrossAttention(nn.Module):
             out = out[:, n_tokens_to_mask:]
         return self.to_out(out)
 
+import traceback, trace
 
 class MemoryEfficientCrossAttention(nn.Module):
     # https://github.com/MatthieuTPHR/diffusers/blob/d80b531ff8060ec1ea982b65a1b8df70f73aa67c/src/diffusers/models/attention.py#L223
@@ -325,6 +327,17 @@ class MemoryEfficientCrossAttention(nn.Module):
         context = default(context, x)
         k = self.to_k(context)
         v = self.to_v(context)
+
+        '''
+        if q.dtype != torch.float16 and q.dtype != torch.bfloat16:
+            print('q.dtype =', q.dtype)
+            traceback.print_exc()
+            traceback.print_stack()
+            tracer = trace.Trace()
+            tracer.run("yo()")
+            r = tracer.results()
+            r.write_results()
+        '''
 
         if n_times_crossframe_attn_in_self:
             # reprogramming cross-frame attention as in https://arxiv.org/abs/2303.13439

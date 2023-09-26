@@ -91,7 +91,7 @@ class SamplingSpec:
     is_guided: bool
 
 
-model_specs = {
+    '''
     ModelArchitecture.SD_2_1: SamplingSpec(
         height=512,
         width=512,
@@ -132,6 +132,8 @@ model_specs = {
         ckpt="sd_xl_refiner_0.9.safetensors",
         is_guided=True,
     ),
+    '''
+model_specs = {
     ModelArchitecture.SDXL_V1_BASE: SamplingSpec(
         height=1024,
         width=1024,

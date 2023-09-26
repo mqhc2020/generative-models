@@ -297,6 +297,7 @@ def do_img2img(
                 samples_x = model.decode_first_stage(samples_z)
                 samples = torch.clamp((samples_x + 1.0) / 2.0, min=0.0, max=1.0)
 
+
                 if filter is not None:
                     samples = filter(samples)
 
