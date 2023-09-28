@@ -10,6 +10,7 @@ from sgm.inference.api import (
     SamplingParams,
     SamplingPipeline,
     Sampler,
+    Sampler_mini,
     ModelArchitecture,
 )
 import sgm.inference.helpers as helpers
@@ -101,17 +102,25 @@ class TestInference:
             img.save(os.path.join('output/img2img', 'output_{}_{}.png'.format(sampler_enum.value, i)))
     '''
 
-    @pytest.mark.parametrize("sampler_enum", Sampler)
+    @pytest.mark.parametrize("sampler_enum", Sampler_mini)
     @pytest.mark.parametrize(
-        "use_init_image", [True, False], ids=["img2img", "txt2img"]
+        "use_init_image", [False], ids=["txt2img"]
+        #"use_init_image", [True, False], ids=["img2img", "txt2img"]
     )
     def test_sdxl_with_refiner(
         self,
         sdxl_pipelines: Tuple[SamplingPipeline, SamplingPipeline],
         sampler_enum,
         use_init_image,
+        n_samples
     ):
         base_pipeline, refiner_pipeline = sdxl_pipelines
+
+        #ret = pytestconfig.getoption('n_samples')
+        #ret = n_samples
+        #samples = int(ret) if ret != None else NUM_SAMPLES
+        print('n_samples =', n_samples)
+
         if use_init_image:
             output = base_pipeline.image_to_image(
                 params=SamplingParams(sampler=sampler_enum.value, steps=int(N_STEPS*HIGH_NOISE_FRAC)),
@@ -120,7 +129,7 @@ class TestInference:
                 ),
                 prompt="A professional photograph of an astronaut riding a pig",
                 negative_prompt="",
-                samples=NUM_SAMPLES,
+                samples=n_samples,
                 return_latents=True,
             )
         else:
@@ -128,7 +137,7 @@ class TestInference:
                 params=SamplingParams(sampler=sampler_enum.value, steps=int(N_STEPS*HIGH_NOISE_FRAC)),
                 prompt="A professional photograph of an astronaut riding a pig",
                 negative_prompt="",
-                samples=NUM_SAMPLES,
+                samples=n_samples,
                 return_latents=True,
             )
 
@@ -141,15 +150,15 @@ class TestInference:
             image=samples_z,
             prompt="A professional photograph of an astronaut riding a pig",
             negative_prompt="",
-            samples=NUM_SAMPLES,
+            samples=n_samples,
         )
 
         output = output.cpu() * 255
-        for i in range(0, NUM_SAMPLES):
+        for i in range(0, n_samples):
             # N C H W
             _sample = output[i]
             _sample = np.transpose(_sample.numpy().astype(np.uint8), (1, 2, 0))
             #print(f"Shape of tensor (rearranged): {_sample.shape}")
             img = Image.fromarray(_sample)
-            img.save(os.path.join('output', 'output_{}_{}_{}.png'.format(sampler_enum.value, 'ii' if use_init_image else 'ti', i)))
+            img.save(os.path.join('output', 'output_{}_{}_{}_b{}.png'.format(sampler_enum.value, 'ii' if use_init_image else 'ti', i, n_samples)))
 

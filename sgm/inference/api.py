@@ -36,6 +36,10 @@ class Sampler(str, Enum):
     DPMPP2M = "DPMPP2MSampler"
     LINEAR_MULTISTEP = "LinearMultistepSampler"
 
+class Sampler_mini(str, Enum):
+    HEUN_EDM = "HeunEDMSampler"
+    DPMPP2M = "DPMPP2MSampler"
+
 
 class Discretization(str, Enum):
     LEGACY_DDPM = "LegacyDDPMDiscretization"

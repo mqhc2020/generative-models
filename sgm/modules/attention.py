@@ -8,6 +8,9 @@ from einops import rearrange, repeat
 from packaging import version
 from torch import nn
 
+import os
+from enum import Enum
+
 if version.parse(torch.__version__) >= version.parse("2.0.0"):
     SDP_IS_AVAILABLE = True
     from torch.backends.cuda import SDPBackend, sdp_kernel
@@ -52,6 +55,27 @@ except:
     print("no module 'xformers'. Processing without...")
 
 from .diffusionmodules.util import checkpoint
+
+# switch backend
+class MemOpt(Enum):
+    NO_OPT = 0
+    FLASH = 1
+    XFORMERS = 2
+    SDP = 3
+
+def get_override_mem_opt():
+    option = os.getenv('SD_PT_MEM', default='xformers')
+
+    if option == 'flash':
+        return MemOpt.FLASH
+    elif option == 'xformers':
+        return MemOpt.XFORMERS
+    elif option == 'no_opt':
+        return MemOpt.NO_OPT
+    elif option == 'sdp':
+        return MemOpt.SDP
+
+
 
 
 def exists(val):
@@ -422,6 +446,12 @@ class BasicTransformerBlock(nn.Module):
             else:
                 print("Falling back to xformers efficient attention.")
                 attn_mode = "softmax-xformers"
+
+        mem_opt = get_override_mem_opt()
+        print('mem_opt =', mem_opt)
+        self.attn_mode = "softmax-xformers" if XFORMERS_IS_AVAILABLE and mem_opt == MemOpt.XFORMERS \
+                    else "softmax"
+
         attn_cls = self.ATTENTION_MODES[attn_mode]
         if version.parse(torch.__version__) >= version.parse("2.0.0"):
             assert sdp_backend is None or isinstance(sdp_backend, SDPBackend)

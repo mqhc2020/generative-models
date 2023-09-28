@@ -18,7 +18,17 @@ from ...modules.diffusionmodules.sampling_utils import (
 )
 from ...util import append_dims, default, instantiate_from_config
 
+from time import strftime, localtime
+import os
+import csv
+
+#tstr = strftime("%m_%d_%Y_%H_%M_%S", localtime())
+#SAMPLING_CSV_FILE = f'sampling_{tstr}.csv'
+SAMPLING_CSV_FILE = 'profiling/sampling.csv'
+SAMPLING_CSV_FILE_ENV = 'SAMPLING_CSV_FILE_ENV'
+
 DEFAULT_GUIDER = {"target": "sgm.modules.diffusionmodules.guiders.IdentityGuider"}
+
 
 
 class BaseDiffusionSampler:
@@ -40,6 +50,19 @@ class BaseDiffusionSampler:
         )
         self.verbose = verbose
         self.device = device
+
+        csv_file = open(SAMPLING_CSV_FILE, 'a')
+        self.writer = csv.writer(csv_file)
+        os.environ[SAMPLING_CSV_FILE_ENV] = SAMPLING_CSV_FILE
+        print('debug env', os.environ[SAMPLING_CSV_FILE_ENV])
+
+    def output_csv(self, it, batch_size):
+        n = it.format_dict["n"]
+        elapsed = it.format_dict["elapsed"]
+        # Throughput: it/s
+        #self.writer.writerow([__class__.__name__, str(n), str(elapsed), str(n/elapsed)])
+        # Throughput: image/s
+        self.writer.writerow([self.__class__.__name__, batch_size, str(n), str(elapsed)])
 
     def prepare_sampling_loop(self, x, cond, uc=None, num_steps=None):
         sigmas = self.discretization(
@@ -114,21 +137,23 @@ class EDMSampler(SingleStepDiffusionSampler):
             x, cond, uc, num_steps
         )
 
-        for i in self.get_sigma_gen(num_sigmas):
-            gamma = (
-                min(self.s_churn / (num_sigmas - 1), 2**0.5 - 1)
-                if self.s_tmin <= sigmas[i] <= self.s_tmax
-                else 0.0
-            )
-            x = self.sampler_step(
-                s_in * sigmas[i],
-                s_in * sigmas[i + 1],
-                denoiser,
-                x,
-                cond,
-                uc,
-                gamma,
-            )
+        with self.get_sigma_gen(num_sigmas) as it:
+            for i in it:
+                gamma = (
+                    min(self.s_churn / (num_sigmas - 1), 2**0.5 - 1)
+                    if self.s_tmin <= sigmas[i] <= self.s_tmax
+                    else 0.0
+                )
+                x = self.sampler_step(
+                    s_in * sigmas[i],
+                    s_in * sigmas[i + 1],
+                    denoiser,
+                    x,
+                    cond,
+                    uc,
+                    gamma,
+                )
+            self.output_csv(it, cond['crossattn'].shape[0])
 
         return x
 
@@ -350,16 +375,18 @@ class DPMPP2MSampler(BaseDiffusionSampler):
         )
 
         old_denoised = None
-        for i in self.get_sigma_gen(num_sigmas):
-            x, old_denoised = self.sampler_step(
-                old_denoised,
-                None if i == 0 else s_in * sigmas[i - 1],
-                s_in * sigmas[i],
-                s_in * sigmas[i + 1],
-                denoiser,
-                x,
-                cond,
-                uc=uc,
-            )
+        with self.get_sigma_gen(num_sigmas) as it:
+            for i in it:
+                x, old_denoised = self.sampler_step(
+                    old_denoised,
+                    None if i == 0 else s_in * sigmas[i - 1],
+                    s_in * sigmas[i],
+                    s_in * sigmas[i + 1],
+                    denoiser,
+                    x,
+                    cond,
+                    uc=uc,
+                )
+            self.output_csv(it, cond['crossattn'].shape[0])
 
         return x
