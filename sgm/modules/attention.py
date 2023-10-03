@@ -449,8 +449,9 @@ class BasicTransformerBlock(nn.Module):
 
         mem_opt = get_override_mem_opt()
         print('mem_opt =', mem_opt)
-        self.attn_mode = "softmax-xformers" if XFORMERS_IS_AVAILABLE and mem_opt == MemOpt.XFORMERS \
+        attn_mode = "softmax-xformers" if XFORMERS_IS_AVAILABLE and mem_opt == MemOpt.XFORMERS \
                     else "softmax"
+        print('Use attention backend {} in {}:'.format(attn_mode, self.__class__.__name__))
 
         attn_cls = self.ATTENTION_MODES[attn_mode]
         if version.parse(torch.__version__) >= version.parse("2.0.0"):

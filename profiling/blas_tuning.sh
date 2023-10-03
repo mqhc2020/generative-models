@@ -4,20 +4,19 @@
 
 PROF_DIR="profiling"
 TUNING_DIR="tuning_results"
+OUTPUT_DIR="outputs"
 LOG_DIR="logs"
 ROCBLASTER_OUTPUT="./BlasterOutput.csv"
 ROCTUNER_OUTPUT="./TunerOutput.csv"
 ROC_SOLUTIONS_FILE_PREFIX="./Solutions"
 TUNED_CSV_RESULT=$PROF_DIR/blas_tuning_applied.csv
-NOT_TUNED_CSV_RESULT=$PROF_DIR/profiling/blas_tuning_not_applied.csv
+NOT_TUNED_CSV_RESULT=$PROF_DIR/blas_tuning_not_applied.csv
 TUNED_STATS_OUTPUT=$PROF_DIR/blas_tuning_applied.stats.csv
 SAMPLING_CSV_FILE_IN="sampling.csv"
-SAMPLING_CSV_FILE_OUT="sampling_out.csv"
+SAMPLING_CSV_FILE_OUT="sampling_out"
 
 FAST_MODE=False
 NUM_ITER=5
-BATCH_SIZE_UP_TO=8
-
 
 function wait_for_subs() {
 	for job in `jobs -p`
@@ -60,7 +59,6 @@ if [[ "$1" == "-X" || "$1" == "-x" ]]; then
 	if [[ "$1" == "-X" ]]; then
 		FAST_MODE=True
 		#NUM_ITER=1
-		#BATCH_SIZE_UP_TO=1
 	fi
 
 	command -v rocBlaster >/dev/null 2>&1 || { echo >&2 "Need rocBlaster but it's not installed. Aborting."; exit 1; }
@@ -69,14 +67,14 @@ if [[ "$1" == "-X" || "$1" == "-x" ]]; then
 	ATTN_BACKEND=$(get_opt)
 
 	if [[ "$1" == "-X" ]]; then
-		for b in $(seq 1 $BATCH_SIZE_UP_TO)
+		for b in $(seq 1 $2)
 		do
                         OUTPUT_FILE=$PROF_DIR/$TUNING_DIR/${ROC_SOLUTIONS_FILE_PREFIX}_${ATTN_BACKEND}_$b.csv
 			HIP_VISIBLE_DEVICES=$(($b-1)) rocBlaster -o $OUTPUT_FILE python scripts/txt2img.py --n_samples $b --prompt "a professional photograph of an astronaut riding a horse" --ckpt 512-base-ema.ckpt --config configs/stable-diffusion/v2-inference.yaml --device cuda &
 		done
 		wait_for_subs
 	else
-		for b in $(seq 1 $BATCH_SIZE_UP_TO)
+		for b in $(seq 1 $2)
 		do
 			OUTPUT_FILE=$PROF_DIR/$TUNING_DIR/${ROC_SOLUTIONS_FILE_PREFIX}_${ATTN_BACKEND}_$b.csv
 			rocBlaster -o $OUTPUT_FILE python scripts/txt2img.py --n_samples $b --prompt "a professional photograph of an astronaut riding a horse" --ckpt 512-base-ema.ckpt --config configs/stable-diffusion/v2-inference.yaml --device cuda
@@ -89,7 +87,7 @@ elif [[ "$1" == "-y" ]]; then
 	mkdir -p $PROF_DIR/$TUNING_DIR
         ATTN_BACKEND=$(get_opt)
 
-	for b in $(seq 1 $BATCH_SIZE_UP_TO)
+	for b in $(seq 1 $2)
         do
             OUTPUT_FILE=$PROF_DIR/$TUNING_DIR/${ROC_SOLUTIONS_FILE_PREFIX}_${ATTN_BACKEND}_$b.csv
             python $PROF_DIR/parse_stats_rocm.py -t --csv-file $OUTPUT_FILE python scripts/txt2img.py --n_samples $b --prompt "a professional photograph of an astronaut riding a horse" --ckpt 512-base-ema.ckpt --config configs/stable-diffusion/v2-inference.yaml --device cuda
@@ -110,35 +108,34 @@ elif [[ "$1" == "-T" || "$1" == "-t" ]]; then
 		if [[ "$1" == "-T" ]]; then
 			FAST_MODE=True
 			#NUM_ITER=1
-			#BATCH_SIZE_UP_TO=1
 		fi
 
 		for i in $(seq 1 $NUM_ITER)
 		do
 			if [[ "$FAST_MODE" == "True" ]]; then
-				for b in $(seq 1 $BATCH_SIZE_UP_TO)
+				for b in $(seq 1 $2)
 				do
 					HIP_VISIBLE_DEVICES=$(($b-1)) python scripts/txt2img.py --n_samples $b --prompt "a professional photograph of an astronaut riding a horse" --ckpt 512-base-ema.ckpt --config configs/stable-diffusion/v2-inference.yaml --device cuda &
 				done
 
 				wait_for_subs
-				echo "<iter $i> <batch $BATCH_SIZE_UP_TO> finished. Not tuned."
+				echo "<iter $i> <batch $2> finished. Not tuned."
 
 				ATTN_BACKEND=$(get_opt)
 				INPUT_FILE=$PROF_DIR/$TUNING_DIR/${ROC_SOLUTIONS_FILE_PREFIX}_${ATTN_BACKEND}_$b.csv
-				for b in $(seq 1 $BATCH_SIZE_UP_TO)
+				for b in $(seq 1 $2)
 				do
 					HIP_VISIBLE_DEVICES=$(($b-1)) ROCBLAS_TENSILE_GEMM_OVERRIDE_PATH=$INPUT_FILE python scripts/txt2img.py --n_samples $b --prompt "a professional photograph of an astronaut riding a horse" --ckpt 512-base-ema.ckpt --config configs/stable-diffusion/v2-inference.yaml --device cuda
 				done
 
 				wait_for_subs
-				echo "<iter $i> <batch $BATCH_SIZE_UP_TO> finished. Tuned."
+				echo "<iter $i> <batch $2> finished. Tuned."
 
 			else
 				#THE_TIME=$(date +"%Y-%m-%d")
 				THE_TIME=$(date +"%Y-%m-%d_%H-%M-%S")
 				LOG_FILE=$PROF_DIR/$LOG_DIR/sd_log_${THE_TIME}.log
-				for b in $(seq 1 $BATCH_SIZE_UP_TO)
+				for b in $(seq 1 $2)
 				do
 					#python scripts/txt2img.py --n_samples $b --prompt "a professional photograph of an astronaut riding a horse" --ckpt 512-base-ema.ckpt --config configs/stable-diffusion/v2-inference.yaml --device cuda >> $LOG_FILE
 					pytest --n_samples $b -s tests/inference/test_inference.py
@@ -158,19 +155,28 @@ elif [[ "$1" == "-T" || "$1" == "-t" ]]; then
 	fi
 elif [[ "$1" == "-s" ]]; then
 
+	mkdir -p $PROF_DIR/$OUTPUT_DIR
+
 	expo=$(log $2)
 
 	THE_TIME=$(date +"%Y-%m-%d_%H-%M-%S")
 	LOG_FILE=$PROF_DIR/$LOG_DIR/sd_log_${THE_TIME}.log
 
-	rm  $PROF_DIR/$SAMPLING_CSV_FILE_OUT
 
 	for i in $(seq 0 $expo)
 	do
 		set -x
 		b=$((2**$i))
+		ATTN_BACKEND=$(get_opt)
+
+		rm $PROF_DIR/$SAMPLING_CSV_FILE_IN
+
+		OUTFILE=$PROF_DIR/$OUTPUT_DIR/${SAMPLING_CSV_FILE_OUT}_b${b}_${ATTN_BACKEND}.csv
+
+		rm $OUTFILE
+
 		pytest --n_samples $b -s -v --log-file=$LOG_FILE tests/inference/test_inference.py
-		python $PROF_DIR/utils.py -m -i $PROF_DIR/$SAMPLING_CSV_FILE_IN -o $PROF_DIR/$SAMPLING_CSV_FILE_OUT
+		python $PROF_DIR/utils.py -m -i $PROF_DIR/$SAMPLING_CSV_FILE_IN -o $OUTFILE
 		set +x
 	done
 elif [[ "$1" == "-p" ]]; then

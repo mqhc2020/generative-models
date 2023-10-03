@@ -18,6 +18,7 @@ import sgm.inference.helpers as helpers
 import os
 import numpy as np
 
+# TODO: besides batch size control, add iteration control also?
 NUM_SAMPLES = 1
 
 N_STEPS = 40
@@ -160,5 +161,5 @@ class TestInference:
             _sample = np.transpose(_sample.numpy().astype(np.uint8), (1, 2, 0))
             #print(f"Shape of tensor (rearranged): {_sample.shape}")
             img = Image.fromarray(_sample)
-            img.save(os.path.join('output', 'output_{}_{}_{}_b{}.png'.format(sampler_enum.value, 'ii' if use_init_image else 'ti', i, n_samples)))
+            img.save(os.path.join('profiling/outputs', 'output_{}_{}_{}_b{}.png'.format(sampler_enum.value, 'ii' if use_init_image else 'ti', i, n_samples)))
 

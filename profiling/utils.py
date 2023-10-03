@@ -82,6 +82,7 @@ elif args.m:
                     batch = int(l[1])
                 else:
                     assert batch == int(l[1])
-            ll = [batch, iters, elapsed]
+            # 2 samplers!!!
+            ll = [batch, iters, elapsed, (elapsed/batch)/2, 2*(batch/elapsed)]
             #print('Summed up:', ll)
             writer.writerow(ll)
