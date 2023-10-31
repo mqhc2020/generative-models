@@ -17,7 +17,7 @@ ENV_TUNING_V_0 = '6'
 ENV_TUNING_K_1 = 'TENSILE_DB'
 ENV_TUNING_V_1 = '0x8000'
 
-'''
+''' Stable Diffusion
 krnl_cat = {
         'attention': [['attention', 'attn', 'gemm_softmax_gemm'], 0],
         'convolution' : [['igemm', 'conv', 'convolution_forward_implicit', 'naive_conv_fwd'], 0],
@@ -28,6 +28,7 @@ krnl_cat = {
         }
 '''
 
+''' LLAMA2
 krnl_cat = {
         'reduce' : [['reduce_kernel'], 0],
         'rccl' : [['rccl'], 0],
@@ -40,6 +41,22 @@ krnl_cat = {
         'vllm' : [['vllm::'], 0],
         'rocprim' : [['rocprim::'], 0],
         'ATEN' : [['at::'], 0],
+        }
+'''
+
+# Mask R-CNN
+krnl_cat =  {
+        'hiptrace' : [['barrier packet'], 0],
+        'roialign' : [['RoIAlign'], 0],
+        'attention' : [['attention', 'attn', 'gemm_softmax_gemm'], 0],
+        'RCCL' : [['nccl', 'rccl'], 0],
+        'convolution' : [['igemm', 'conv', 'convolution_forward_implicit', 'naive_conv_fwd'], 0],
+        'memory copy' : [['copy'], 0],
+        'norm' : [['norm'], 0],
+        'MIOpen': [['batched_transpose'], 0],
+        'rocBLAS' : [['cijk'] ,0],
+        'rocprim' : [['rocprim::'], 0],
+        'ATEN' : [['at::'], 0]
         }
 
 #"naive_conv_fwd_nchw_half_double_half.kd",45,4955980623,110132902,29.682252163588068
@@ -509,14 +526,39 @@ def main():
 
         krnl_cat_sorted = dict(sorted(krnl_cat.items(), key=lambda item: item[1][1], reverse = True))
 
+        #output_as_csv = False
+        output_as_csv = True
+        
+
+        hiptrace_found = False
+        expandf = lambda x, y: float(x) * (100 / y)
+        remainer = 100
+
         for k, v in krnl_cat_sorted.items():
-            if v[1] > 0:
-                print(k, ':', v[1])
-                #print(v[1], end = ',')
+            if k == 'hiptrace':
+                total = total - float(v[1])
+                remainer = total
+                hiptrace_found = True
+            else:
+                if output_as_csv and v[1] > 0:
+                    print(k, end = ',')
+
+        if output_as_csv:
+            print('others')
+
+        for k, v in krnl_cat_sorted.items():
+            if v[1] > 0 and k != 'hiptrace':
+                if output_as_csv:
+                    print(expandf(v[1], remainer), end = ',')
+                else:
+                    print(k, ':', expandf(v[1], remainer))
                 total = total - float(v[1])
 
-        print('others', ':', total)
-        #print(total, end=',')
+        if output_as_csv:
+            print(expandf(total, remainer))
+        else:
+            print('others', ':', expandf(total, remainer))
+
         print('\r')
 
         if args.blas_projecting:
